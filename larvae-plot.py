@@ -41,7 +41,7 @@ if not input_dir or input_dir == "":
 
 
 # update last_dir
-config["last_dir"] = os.path.dirname(input_dir)
+config["last_dir"] = input_dir
 with open(config_path, "w") as f:
     toml.dump(config, f)
 
@@ -258,6 +258,10 @@ for tiff_file in tiff_files:
     )
 
     cropped_images.append((tiff_path, output_array))
+
+if len(cropped_images) == 0:
+    print("no sucessful processed image. exiting")
+    sys.exit(2)
 
 # save cropped_images to a subfolder named "crop"
 crop_dir = os.path.join(input_dir, "crop")
