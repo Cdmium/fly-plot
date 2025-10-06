@@ -8,7 +8,6 @@ import skimage
 import tifffile
 import toml
 import numpy as np
-import matplotlib.pyplot as plt
 
 
 # config path setting
@@ -286,4 +285,4 @@ if len(cropped_images) > 0:
 
     montage_path = os.path.join(input_dir, f"montage_{len(cropped_images)}.png")
     print(f"saving montage {montage_path} ...")
-    plt.imsave(montage_path, montage_array)
+    cv2.imwrite(montage_path, cv2.cvtColor(montage_array, cv2.COLOR_RGB2BGR))
