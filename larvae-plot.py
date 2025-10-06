@@ -1,13 +1,13 @@
 import math
 import os
 import sys
-import crossfiledialog
 import cv2
 import scipy
 import skimage
 import tifffile
 import toml
 import numpy as np
+import filedialpy
 
 
 # config path setting
@@ -34,7 +34,7 @@ def get_last_dir():
 
 
 # dialog to select input folder. exit if nothing is selected
-input_dir = crossfiledialog.choose_folder("Choose Input Folder", get_last_dir())
+input_dir = filedialpy.openDir(title="Choose Input Folder", initial_dir=get_last_dir())
 if not input_dir or input_dir == "":
     print("no folder selected. exiting.")
     sys.exit(1)
