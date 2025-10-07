@@ -39,6 +39,8 @@ if not input_dir or input_dir == "":
     print("no folder selected. exiting.")
     sys.exit(1)
 
+group_name = os.path.basename(input_dir)
+
 
 # update last_dir
 config["last_dir"] = input_dir
@@ -47,12 +49,14 @@ with open(config_path, "w") as f:
 
 
 # get all tiff file in folder
-tiff_files = [
-    f
-    for f in os.listdir(input_dir)
-    if os.path.isfile(os.path.join(input_dir, f))
-    and f.lower().endswith((".tiff", ".tif", ".TIFF", ".TIF"))
-]
+tiff_files = []
+for root, dirs, files in os.walk(input_dir):
+    # Skip folders with 'crop' in their name
+    if "crop" in os.path.basename(root).lower():
+        continue
+    for f in files:
+        if f.lower().endswith((".tiff", ".tif", ".TIFF", ".TIF")):
+            tiff_files.append(os.path.relpath(os.path.join(root, f), input_dir))
 
 # gather all tifffiles,
 # identify the largest object on image,
@@ -287,6 +291,6 @@ if len(cropped_images) > 0:
             cropped_image
         )
 
-    montage_path = os.path.join(input_dir, f"montage_{len(cropped_images)}.png")
+    montage_path = os.path.join(input_dir, f"montage_{group_name}_{len(cropped_images)}.png")
     print(f"saving montage {montage_path} ...")
     cv2.imwrite(montage_path, cv2.cvtColor(montage_array, cv2.COLOR_RGB2BGR))
