@@ -3,6 +3,7 @@ import os
 import sys
 import cv2
 import scipy
+import scipy.ndimage
 import skimage
 import tifffile
 import toml
@@ -116,6 +117,7 @@ for tiff_file in tiff_files:
     i, j = np.unravel_index(np.argmax(dists), dists.shape)
     tip1 = tuple(mask_points[i])
     tip2 = tuple(mask_points[j])
+    center_of_mass = scipy.ndimage.center_of_mass(image_mask)
 
     # identify the head, the greener tip
     # Extract green channel
@@ -125,8 +127,9 @@ for tiff_file in tiff_files:
     # Compute 0.2 and 0.8 points along the line between tip1 and tip2
     tip1 = np.array(tip1)
     tip2 = np.array(tip2)
-    point_02 = tip1 + 0.2 * (tip2 - tip1)
-    point_08 = tip1 + 0.8 * (tip2 - tip1)
+    center_of_mass = np.array(center_of_mass)
+    point_02 = tip1 + 0.4 * (center_of_mass - tip1)
+    point_08 = tip2 + 0.4 * (center_of_mass - tip2)
 
     # Round to nearest integer pixel coordinates
     point_02 = np.round(point_02).astype(int)
@@ -170,15 +173,10 @@ for tiff_file in tiff_files:
     dy = head_tip[0] - tail_tip[0]
     angle_rad = math.atan2(dy, dx)  # Angle in radians
     angle_deg = math.degrees(angle_rad)  # Convert to degrees
-    center_x = int((head_tip[1] + tail_tip[1]) / 2)
-    center_y = int((head_tip[0] + tail_tip[0]) / 2)
 
     # Target angle for vertical up (head on top, negative y direction)
     target_angle_deg = -90.0
     rotation_deg = target_angle_deg - angle_deg
-
-    # Center point
-    center = np.array([center_y, center_x])  # [y, x]
 
     # Function to compute matrix and offset
     def compute_transform(rotation_deg):
@@ -186,7 +184,7 @@ for tiff_file in tiff_files:
         cos = math.cos(angle_rad)
         sin = math.sin(angle_rad)
         rotation_matrix = np.array([[cos, -sin], [sin, cos]])
-        offset = center - rotation_matrix @ center
+        offset = center_of_mass - rotation_matrix @ center_of_mass
         inv_matrix = np.array([[cos, sin], [-sin, cos]])  # Inverse for mapping points
         return rotation_matrix, inv_matrix, offset
 
@@ -241,8 +239,8 @@ for tiff_file in tiff_files:
     rotated_array = np.clip(rotated_array, 0, 255).astype(np.uint8)
 
     # New center position in rotated image
-    new_center_y = center_y - min_y
-    new_center_x = center_x - min_x
+    new_center_y = center_of_mass[0] - min_y
+    new_center_x = center_of_mass[1] - min_x
 
     # Crop to 1800 height x 600 width around the new center
     half_height = 900  # 1800 / 2
@@ -269,6 +267,7 @@ for tiff_file in tiff_files:
 
     if dev_mode:
         import matplotlib.pyplot as plt
+        from matplotlib.patches import Circle
 
         fig, axs = plt.subplots(1, 3)
         axs[0].imshow(image)
@@ -281,10 +280,19 @@ for tiff_file in tiff_files:
             arrowprops=dict(arrowstyle="->"),
         )
         axs[0].text(
-            x=head_tip[1], 
+            x=head_tip[1],
             y=head_tip[0],
             s="green tip",
             c="white",
+        )
+        axs[0].add_patch(
+            Circle((center_of_mass[1], center_of_mass[0]), 5, color="white", fill=True)
+        )
+        axs[0].add_patch(
+            Circle((point_02[1], point_02[0]), 5, color="white", fill=True)
+        )
+        axs[0].add_patch(
+            Circle((point_08[1], point_08[0]), 5, color="white", fill=True)
         )
         axs[1].annotate(
             "",
