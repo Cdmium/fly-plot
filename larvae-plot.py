@@ -10,6 +10,10 @@ import numpy as np
 import filedialpy
 
 
+dev_mode = os.environ.get("FLY_PLOT_DEV") == "1"
+if dev_mode:
+    print("Running in dev mode")
+
 # config path setting
 app_dir = os.path.dirname(os.path.abspath(__file__))
 config_path = os.path.join(app_dir, "config.toml")
@@ -263,6 +267,33 @@ for tiff_file in tiff_files:
 
     cropped_images.append((tiff_path, output_array))
 
+    if dev_mode:
+        import matplotlib.pyplot as plt
+
+        fig, axs = plt.subplots(1, 3)
+        axs[0].imshow(image)
+        axs[1].imshow(image_border)
+        axs[2].imshow(output_array)
+        axs[0].annotate(
+            "",
+            xytext=(head_tip[1], head_tip[0]),
+            xy=(tail_tip[1], tail_tip[0]),
+            arrowprops=dict(arrowstyle="->"),
+        )
+        axs[0].text(
+            x=head_tip[1], 
+            y=head_tip[0],
+            s="green tip",
+            c="white",
+        )
+        axs[1].annotate(
+            "",
+            xytext=(head_tip[1], head_tip[0]),
+            xy=(tail_tip[1], tail_tip[0]),
+            arrowprops=dict(arrowstyle="->"),
+        )
+        plt.show()
+
 if len(cropped_images) == 0:
     print("no sucessful processed image. exiting")
     sys.exit(2)
@@ -291,6 +322,8 @@ if len(cropped_images) > 0:
             cropped_image
         )
 
-    montage_path = os.path.join(input_dir, f"montage_{group_name}_{len(cropped_images)}.png")
+    montage_path = os.path.join(
+        input_dir, f"montage_{group_name}_{len(cropped_images)}.png"
+    )
     print(f"saving montage {montage_path} ...")
     cv2.imwrite(montage_path, cv2.cvtColor(montage_array, cv2.COLOR_RGB2BGR))
