@@ -38,6 +38,24 @@ def get_last_dir():
     return last_dir
 
 
+# get settings from config file
+parameter_path = sys.argv[1]
+
+
+if os.path.isfile(os.path.join(app_dir, parameter_path)):
+    # use config file in app dir
+    parameter_path = os.path.join(app_dir, parameter_path)
+elif os.path.isfile(parameter_path):
+    # absolute path
+    pass
+else:
+    # fallback to larvae.toml
+    parameter_path = os.path.join(app_dir, "larvae.toml")
+parameters = toml.load(parameter_path)
+print("Running with parameter: ")
+print(parameters)
+
+
 # dialog to select input folder. exit if nothing is selected
 input_dir = filedialpy.openDir(title="Choose Input Folder", initial_dir=get_last_dir())
 if not input_dir or input_dir == "":
@@ -69,7 +87,7 @@ for root, dirs, files in os.walk(input_dir):
 # find the two tips (the farest two points on the skeleton)
 # find the head (the greener tip)
 # rotate the image to make the two tips aligned with vertical axis
-# crop out the largest object (size: 1800x600)
+# crop out the largest object (size: parameters["export_height"]xparameters["export_width"])
 cropped_images = []
 for tiff_file in tiff_files:
     # read data
@@ -128,8 +146,8 @@ for tiff_file in tiff_files:
     tip1 = np.array(tip1)
     tip2 = np.array(tip2)
     center_of_mass = np.array(center_of_mass)
-    point_02 = tip1 + 0.4 * (center_of_mass - tip1)
-    point_08 = tip2 + 0.4 * (center_of_mass - tip2)
+    point_02 = tip1 + parameters["tumor_pos"] * (center_of_mass - tip1)
+    point_08 = tip2 + parameters["tumor_pos"] * (center_of_mass - tip2)
 
     # Round to nearest integer pixel coordinates
     point_02 = np.round(point_02).astype(int)
@@ -159,7 +177,7 @@ for tiff_file in tiff_files:
         head_tip = tuple(tip2)
         tail_tip = tuple(tip1)
 
-    # put the raw image on a 1800x600x3 image
+    # put the raw image on a parameters["export_height"]xparameters["export_width"]x3 image
     # rotate to make tail on bottom, head on top
     # make pixel size unchange
     # make the center of the two tips at the center of cropped image
@@ -175,7 +193,7 @@ for tiff_file in tiff_files:
     angle_deg = math.degrees(angle_rad)  # Convert to degrees
 
     # Target angle for vertical up (head on top, negative y direction)
-    target_angle_deg = -90.0
+    target_angle_deg = parameters["target_deg"]
     rotation_deg = target_angle_deg - angle_deg
 
     # Function to compute matrix and offset
@@ -189,17 +207,6 @@ for tiff_file in tiff_files:
         return rotation_matrix, inv_matrix, offset
 
     rotation_matrix, inv_matrix, offset = compute_transform(rotation_deg)
-
-    # Map the top and bottom points to check orientation
-    top_pos = np.array(head_tip)
-    bottom_pos = np.array(tail_tip)
-    mapped_top = inv_matrix @ (top_pos - offset)
-    mapped_bottom = inv_matrix @ (bottom_pos - offset)
-
-    # If head (top) is not above tail (bottom), flip by 180 degrees
-    if mapped_top[0] > mapped_bottom[0]:
-        rotation_deg += 180.0
-        rotation_matrix, inv_matrix, offset = compute_transform(rotation_deg)
 
     # Compute new bounds for full rotated image without clipping
     corners = np.array(
@@ -242,9 +249,9 @@ for tiff_file in tiff_files:
     new_center_y = center_of_mass[0] - min_y
     new_center_x = center_of_mass[1] - min_x
 
-    # Crop to 1800 height x 600 width around the new center
-    half_height = 900  # 1800 / 2
-    half_width = 300  # 600 / 2
+    # Crop to target size around the new center
+    half_height = parameters["export_height"] / 2
+    half_width = parameters["export_width"] / 2
 
     top_crop = max(0, int(new_center_y - half_height))
     bottom_crop = min(new_height, int(new_center_y + half_height))
@@ -255,10 +262,12 @@ for tiff_file in tiff_files:
     crop_width = right_crop - left_crop
     cropped_array = rotated_array[top_crop:bottom_crop, left_crop:right_crop]
 
-    # Pad to exactly 1800x600 if smaller
-    output_array = np.zeros((1800, 600, 3), dtype=np.uint8)
-    pad_top = max(0, (1800 - crop_height) // 2)
-    pad_left = max(0, (600 - crop_width) // 2)
+    # Pad to exactly parameters["export_height"]xparameters["export_width"] if smaller
+    output_array = np.zeros(
+        (parameters["export_height"], parameters["export_width"], 3), dtype=np.uint8
+    )
+    pad_top = max(0, (parameters["export_height"] - crop_height) // 2)
+    pad_left = max(0, (parameters["export_width"] - crop_width) // 2)
     output_array[pad_top : pad_top + crop_height, pad_left : pad_left + crop_width] = (
         cropped_array
     )
@@ -316,19 +325,23 @@ for i, (tiff_path, cropped_image) in enumerate(cropped_images):
     tifffile.imwrite(save_path, cropped_image)
 
 # save a montage in 10 column format
-# width 600 * min(10, n_image) = 1000
-# height 1800 * int(n_image / 10)
+# width parameters["export_width"] * min(10, n_image) = 1000
+# height parameters["export_height"] * int(n_image / 10)
 if len(cropped_images) > 0:
     n_cols = min(10, len(cropped_images))
     n_rows = int(np.ceil(len(cropped_images) / n_cols))
-    montage_array = np.zeros((1800 * n_rows, 600 * n_cols, 3), dtype=np.uint8)
+    montage_array = np.zeros(
+        (parameters["export_height"] * n_rows, parameters["export_width"] * n_cols, 3),
+        dtype=np.uint8,
+    )
 
     for i, (tiff_path, cropped_image) in enumerate(cropped_images):
         row = i // n_cols
         col = i % n_cols
-        montage_array[row * 1800 : (row + 1) * 1800, col * 600 : (col + 1) * 600] = (
-            cropped_image
-        )
+        montage_array[
+            row * parameters["export_height"] : (row + 1) * parameters["export_height"],
+            col * parameters["export_width"] : (col + 1) * parameters["export_width"],
+        ] = cropped_image
 
     montage_path = os.path.join(
         input_dir, f"montage_{group_name}_{len(cropped_images)}.png"
